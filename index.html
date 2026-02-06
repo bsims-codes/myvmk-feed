@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>MyVMK Feed</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 16px; }
+    .item { padding: 14px 0; border-bottom: 1px solid #ddd; }
+    .meta { opacity: 0.7; font-size: 0.9rem; margin-bottom: 6px; }
+  </style>
+</head>
+<body>
+  <h1>MyVMK (via RSS)</h1>
+  <p>This page is populated by GitHub Actions from the RSS feed.</p>
+  <div id="feed">Loading…</div>
+
+  <script>
+    fetch("./feed.json", { cache: "no-store" })
+      .then(r => r.json())
+      .then(data => {
+        const el = document.getElementById("feed");
+        if (!data.items?.length) { el.textContent = "No items yet."; return; }
+        el.innerHTML = data.items.map(i => `
+          <div class="item">
+            <div class="meta">${new Date(i.pubDate).toLocaleString()}</div>
+            <div>${i.title}</div>
+            <div><a href="${i.link}" target="_blank" rel="noreferrer">Open</a></div>
+          </div>
+        `).join("");
+      })
+      .catch(() => { document.getElementById("feed").textContent = "Failed to load feed.json"; });
+  </script>
+</body>
+</html>

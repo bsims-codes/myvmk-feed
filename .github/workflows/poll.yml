@@ -1,0 +1,36 @@
+name: Poll RSS and notify
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # every 5 minutes
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          npm init -y
+          npm i fast-xml-parser node-fetch@3
+
+      - name: Poll RSS, update feed.json, notify Discord
+        env:
+          RSS_URLS: "https://nitter.poast.org/MyVMK/rss,https://nitter.privacydev.net/MyVMK/rss,https://nitter.net/MyVMK/rss"
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: node .github/scripts/poll.mjs
+
+      - name: Commit changes (if any)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add feed.json .github/state.json || true
+          git diff --cached --quiet && exit 0
+          git commit -m "Update feed"
+          git push
