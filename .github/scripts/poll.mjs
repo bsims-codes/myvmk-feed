@@ -27,13 +27,24 @@ async function scrapeNitter(url) {
     console.log(`Navigating to ${url}...`);
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
+    // Check if we hit a verification page and wait for redirect
+    let title = await page.title();
+    console.log('Initial page title:', title);
+
+    if (title.includes('Verifying') || title.includes('checking')) {
+      console.log('Verification page detected, waiting for redirect...');
+      await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
+      title = await page.title();
+      console.log('After wait, page title:', title);
+    }
+
     // Wait for tweets to load
     await page.waitForSelector('.timeline-item', { timeout: 30000 }).catch(async () => {
       console.log('No .timeline-item found, checking page content...');
       const html = await page.content();
       console.log('Page title:', await page.title());
       console.log('Page HTML length:', html.length);
-      console.log('First 500 chars:', html.substring(0, 500));
+      console.log('First 1000 chars:', html.substring(0, 1000));
     });
 
     // Extract tweets from the page
