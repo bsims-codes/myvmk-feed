@@ -28,8 +28,12 @@ async function scrapeNitter(url) {
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
     // Wait for tweets to load
-    await page.waitForSelector('.timeline-item', { timeout: 30000 }).catch(() => {
+    await page.waitForSelector('.timeline-item', { timeout: 30000 }).catch(async () => {
       console.log('No .timeline-item found, checking page content...');
+      const html = await page.content();
+      console.log('Page title:', await page.title());
+      console.log('Page HTML length:', html.length);
+      console.log('First 500 chars:', html.substring(0, 500));
     });
 
     // Extract tweets from the page
@@ -74,6 +78,9 @@ async function scrapeNitter(url) {
     });
 
     console.log(`Found ${tweets.length} tweets`);
+    if (tweets.length > 0) {
+      console.log('First tweet:', JSON.stringify(tweets[0], null, 2));
+    }
     return tweets;
   } finally {
     await browser.close();
