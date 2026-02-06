@@ -22,7 +22,6 @@ jobs:
 
       - name: Scrape Nitter, update feed.json, notify Discord
         env:
-          NITTER_URL: "https://nitter.net/MyVMK"
           DISCORD_WEBHOOKS: ${{ secrets.DISCORD_WEBHOOKS }}
         run: node .github/scripts/poll.mjs
 

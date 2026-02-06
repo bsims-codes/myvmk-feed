@@ -1,7 +1,15 @@
 import fs from "fs";
 import puppeteer from "puppeteer";
 
-const NITTER_URL = process.env.NITTER_URL || "https://nitter.net/MyVMK";
+const NITTER_INSTANCES = [
+  "https://nitter.poast.org",
+  "https://nitter.privacydev.net",
+  "https://xcancel.com",
+  "https://nitter.net",
+  "https://nitter.cz",
+  "https://nitter.1d4.us",
+];
+const USERNAME = "MyVMK";
 const DISCORD_WEBHOOKS = (process.env.DISCORD_WEBHOOKS || "").split(",").filter(Boolean);
 
 function readJson(path, fallback) {
@@ -13,7 +21,7 @@ function writeJson(path, data) {
   fs.writeFileSync(path, JSON.stringify(data, null, 2));
 }
 
-async function scrapeNitter(url) {
+async function scrapeNitter(instances, username) {
   console.log(`Launching browser...`);
   const browser = await puppeteer.launch({
     headless: true,
@@ -24,75 +32,85 @@ async function scrapeNitter(url) {
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-    console.log(`Navigating to ${url}...`);
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+    for (const instance of instances) {
+      const url = `${instance}/${username}`;
+      console.log(`\nTrying ${url}...`);
 
-    // Check if we hit a verification page and wait for redirect
-    let title = await page.title();
-    console.log('Initial page title:', title);
+      try {
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
 
-    if (title.includes('Verifying') || title.includes('checking')) {
-      console.log('Verification page detected, waiting for redirect...');
-      await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
-      title = await page.title();
-      console.log('After wait, page title:', title);
-    }
+        // Check if we hit a verification page
+        let title = await page.title();
+        console.log('Page title:', title);
 
-    // Wait for tweets to load
-    await page.waitForSelector('.timeline-item', { timeout: 30000 }).catch(async () => {
-      console.log('No .timeline-item found, checking page content...');
-      const html = await page.content();
-      console.log('Page title:', await page.title());
-      console.log('Page HTML length:', html.length);
-      console.log('First 1000 chars:', html.substring(0, 1000));
-    });
-
-    // Extract tweets from the page
-    const tweets = await page.evaluate(() => {
-      const items = document.querySelectorAll('.timeline-item');
-      const results = [];
-
-      items.forEach(item => {
-        const linkEl = item.querySelector('a.tweet-link');
-        const contentEl = item.querySelector('.tweet-content');
-        const dateEl = item.querySelector('.tweet-date a');
-
-        if (linkEl && contentEl) {
-          const tweetPath = linkEl.getAttribute('href')?.replace(/#.*/, '') || '';
-          const tweetId = tweetPath.split('/').pop() || tweetPath;
-          const fullLink = `https://twitter.com${tweetPath}`;
-
-          // Get text content, preserving hashtags
-          let content = contentEl.textContent?.trim() || '';
-
-          // Parse date from title attribute like "Feb 5, 2026 · 11:30 PM UTC"
-          let pubDate = new Date().toISOString();
-          if (dateEl) {
-            const dateTitle = dateEl.getAttribute('title');
-            if (dateTitle) {
-              const dateStr = dateTitle.replace(' · ', ' ').replace(' UTC', '');
-              const parsed = new Date(dateStr + ' UTC');
-              if (!isNaN(parsed.getTime())) pubDate = parsed.toISOString();
-            }
-          }
-
-          results.push({
-            title: content,
-            link: fullLink,
-            pubDate,
-            guid: tweetId
-          });
+        // Wait for verification to complete if needed
+        if (title.includes('Verifying') || title.includes('checking') || title.includes('Just a moment')) {
+          console.log('Verification page detected, waiting...');
+          await new Promise(r => setTimeout(r, 5000));
+          await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {});
+          title = await page.title();
+          console.log('After wait, title:', title);
         }
-      });
 
-      return results;
-    });
+        // Check if page loaded properly
+        const html = await page.content();
+        if (html.length < 100) {
+          console.log(`Empty page (${html.length} chars), skipping...`);
+          continue;
+        }
 
-    console.log(`Found ${tweets.length} tweets`);
-    if (tweets.length > 0) {
-      console.log('First tweet:', JSON.stringify(tweets[0], null, 2));
+        // Wait for tweets
+        const hasTimeline = await page.waitForSelector('.timeline-item', { timeout: 10000 }).catch(() => null);
+        if (!hasTimeline) {
+          console.log('No .timeline-item found, trying next instance...');
+          continue;
+        }
+
+        // Extract tweets
+        const tweets = await page.evaluate(() => {
+          const items = document.querySelectorAll('.timeline-item');
+          const results = [];
+
+          items.forEach(item => {
+            const linkEl = item.querySelector('a.tweet-link');
+            const contentEl = item.querySelector('.tweet-content');
+            const dateEl = item.querySelector('.tweet-date a');
+
+            if (linkEl && contentEl) {
+              const tweetPath = linkEl.getAttribute('href')?.replace(/#.*/, '') || '';
+              const tweetId = tweetPath.split('/').pop() || tweetPath;
+              const fullLink = `https://twitter.com${tweetPath}`;
+              let content = contentEl.textContent?.trim() || '';
+
+              let pubDate = new Date().toISOString();
+              if (dateEl) {
+                const dateTitle = dateEl.getAttribute('title');
+                if (dateTitle) {
+                  const dateStr = dateTitle.replace(' · ', ' ').replace(' UTC', '');
+                  const parsed = new Date(dateStr + ' UTC');
+                  if (!isNaN(parsed.getTime())) pubDate = parsed.toISOString();
+                }
+              }
+
+              results.push({ title: content, link: fullLink, pubDate, guid: tweetId });
+            }
+          });
+
+          return results;
+        });
+
+        if (tweets.length > 0) {
+          console.log(`SUCCESS! Found ${tweets.length} tweets from ${instance}`);
+          console.log('First tweet:', JSON.stringify(tweets[0], null, 2));
+          return tweets;
+        }
+      } catch (err) {
+        console.log(`Error with ${instance}: ${err.message}`);
+      }
     }
-    return tweets;
+
+    console.log('All instances failed');
+    return [];
   } finally {
     await browser.close();
   }
@@ -101,7 +119,7 @@ async function scrapeNitter(url) {
 const statePath = ".github/state.json";
 const state = readJson(statePath, { lastSeenGuid: null });
 
-const normalized = await scrapeNitter(NITTER_URL);
+const normalized = await scrapeNitter(NITTER_INSTANCES, USERNAME);
 
 // Load existing feed and merge with new items (archive all tweets)
 const existingFeed = readJson("feed.json", { items: [] });
@@ -154,7 +172,7 @@ if (DISCORD_WEBHOOKS.length && newItems.length) {
         description: item.title,
         color: 0xFFD700, // Gold
         fields: [{
-          name: "🔗 View Tweet",
+          name: "View Tweet",
           value: `[Open on Twitter/X](${item.link})`,
           inline: true
         }],
@@ -175,4 +193,4 @@ if (DISCORD_WEBHOOKS.length && newItems.length) {
   }
 }
 
-console.log(`Fetched ${normalized.length} items. New: ${newItems.length}`);
+console.log(`\nFetched ${normalized.length} items. New: ${newItems.length}`);
