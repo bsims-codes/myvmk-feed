@@ -1,8 +1,7 @@
 import fs from "fs";
 import fetch from "node-fetch";
-import { XMLParser } from "fast-xml-parser";
 
-const RSS_URLS = (process.env.RSS_URLS || "").split(",").filter(Boolean);
+const NITTER_URL = process.env.NITTER_URL || "https://nitter.net/MyVMK";
 const DISCORD_WEBHOOKS = (process.env.DISCORD_WEBHOOKS || "").split(",").filter(Boolean);
 
 function readJson(path, fallback) {
@@ -14,43 +13,70 @@ function writeJson(path, data) {
   fs.writeFileSync(path, JSON.stringify(data, null, 2));
 }
 
-async function fetchRSS(urls) {
-  for (const url of urls) {
-    try {
-      console.log(`Trying ${url}...`);
-      const res = await fetch(url, {
-        headers: { "user-agent": "github-actions-rss-poller" },
-        timeout: 10000
-      });
-      if (res.ok) {
-        console.log(`Success: ${url}`);
-        return await res.text();
+async function scrapeNitter(url) {
+  console.log(`Scraping ${url}...`);
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch ${url}: ${res.status}`);
+  }
+  const html = await res.text();
+
+  const tweets = [];
+
+  // Split by timeline-item divs
+  const timelineItems = html.split(/<div class="timeline-item[^"]*"[^>]*>/);
+
+  for (const item of timelineItems.slice(1)) { // Skip first empty split
+    // Extract tweet link: <a class="tweet-link" href="/MyVMK/status/123#m">
+    const linkMatch = item.match(/<a class="tweet-link" href="([^"]+)"/);
+
+    // Extract content: <div class="tweet-content media-body" dir="auto">...</div>
+    const contentMatch = item.match(/<div class="tweet-content[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+
+    // Extract date: <span class="tweet-date"><a ... title="Feb 5, 2026 · 11:30 PM UTC">
+    const dateMatch = item.match(/<span class="tweet-date"[^>]*><a[^>]*title="([^"]+)"/);
+
+    if (linkMatch && contentMatch) {
+      // Clean content - remove HTML tags and normalize whitespace
+      let content = contentMatch[1]
+        .replace(/<a[^>]*>#(\w+)<\/a>/g, '#$1') // Preserve hashtags
+        .replace(/<[^>]+>/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      const tweetPath = linkMatch[1].replace(/#.*/, ''); // Remove #m anchor
+      const tweetId = tweetPath.split('/').pop() || tweetPath;
+      const fullLink = `https://twitter.com${tweetPath}`;
+
+      // Parse date like "Feb 5, 2026 · 11:30 PM UTC"
+      let pubDate = new Date().toISOString();
+      if (dateMatch) {
+        const dateStr = dateMatch[1].replace(' · ', ' ').replace(' UTC', '');
+        const parsed = new Date(dateStr + ' UTC');
+        if (!isNaN(parsed)) pubDate = parsed.toISOString();
       }
-      console.log(`Failed (${res.status}): ${url}`);
-    } catch (err) {
-      console.log(`Error: ${url} - ${err.message}`);
+
+      tweets.push({
+        title: content,
+        link: fullLink,
+        pubDate,
+        guid: tweetId
+      });
     }
   }
-  throw new Error("All RSS sources failed");
+
+  console.log(`Found ${tweets.length} tweets`);
+  return tweets;
 }
 
 const statePath = ".github/state.json";
 const state = readJson(statePath, { lastSeenGuid: null });
 
-const xml = await fetchRSS(RSS_URLS);
-const parser = new XMLParser({ ignoreAttributes: false });
-const parsed = parser.parse(xml);
-
-const items = parsed?.rss?.channel?.item
-  ? (Array.isArray(parsed.rss.channel.item) ? parsed.rss.channel.item : [parsed.rss.channel.item])
-  : [];
-
-const normalized = items.map(i => ({
-  title: i.title ?? "",
-  link: i.link ?? "",
-  pubDate: i.pubDate ?? "",
-  guid: (typeof i.guid === "object" ? i.guid["#text"] : i.guid) ?? i.link ?? i.title ?? ""
-}));
+const normalized = await scrapeNitter(NITTER_URL);
 
 // Load existing feed and merge with new items (archive all tweets)
 const existingFeed = readJson("feed.json", { items: [] });

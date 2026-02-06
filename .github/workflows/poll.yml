@@ -1,4 +1,4 @@
-name: Poll RSS and notify
+name: Scrape Nitter and notify
 
 on:
   schedule:
@@ -18,11 +18,11 @@ jobs:
       - name: Install deps
         run: |
           npm init -y
-          npm i fast-xml-parser node-fetch@3
+          npm i node-fetch@3
 
-      - name: Poll RSS, update feed.json, notify Discord
+      - name: Scrape Nitter, update feed.json, notify Discord
         env:
-          RSS_URLS: "https://bird.makeup/users/MyVMK/rss,https://twiiit.com/MyVMK/rss,https://nitter.poast.org/MyVMK/rss,https://nitter.privacydev.net/MyVMK/rss"
+          NITTER_URL: "https://nitter.net/MyVMK"
           DISCORD_WEBHOOKS: ${{ secrets.DISCORD_WEBHOOKS }}
         run: node .github/scripts/poll.mjs
 
