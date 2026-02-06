@@ -1,15 +1,16 @@
-// Run with: node test-discord.mjs "https://discord.com/api/webhooks/...,https://discord.com/api/webhooks/..."
+// Run with: node test-discord.mjs "webhook_url" "optional custom message"
 // Or set DISCORD_WEBHOOKS environment variable
 
 const webhooks = (process.argv[2] || process.env.DISCORD_WEBHOOKS || "").split(",").filter(Boolean);
+const customMessage = process.argv[3];
 
 if (!webhooks.length) {
-  console.log("Usage: node test-discord.mjs \"webhook1,webhook2\"");
+  console.log("Usage: node test-discord.mjs \"webhook1,webhook2\" \"optional message\"");
   console.log("Or set DISCORD_WEBHOOKS environment variable");
   process.exit(1);
 }
 
-const content = `**MyVMK Feed Test** ✨\nThis is a test notification from your MyVMK Feed tracker!\nIf you see this, your webhook is working.`;
+const content = customMessage || `**MyVMK Feed Test** ✨\nThis is a test notification from your MyVMK Feed tracker!\nIf you see this, your webhook is working.`;
 
 for (const webhook of webhooks) {
   try {
