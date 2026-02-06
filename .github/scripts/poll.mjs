@@ -53,9 +53,20 @@ async function loginToTwitter(page) {
 
   // Enter username
   console.log("Entering username...");
+  await usernameInput.click();
   await usernameInput.type(TWITTER_USERNAME, { delay: 100 });
-  await new Promise(r => setTimeout(r, 500));
-  await page.keyboard.press("Enter");
+  await new Promise(r => setTimeout(r, 1000));
+
+  // Try clicking Next button instead of Enter
+  const nextButton = await page.$('[role="button"]:has-text("Next")') ||
+                     await page.$('div[role="button"][tabindex="0"]');
+  if (nextButton) {
+    console.log("Clicking Next button...");
+    await nextButton.click();
+  } else {
+    console.log("No Next button found, pressing Enter...");
+    await page.keyboard.press("Enter");
+  }
   await new Promise(r => setTimeout(r, 3000));
 
   // Check if there's an additional verification step (phone/email)
@@ -95,9 +106,16 @@ async function loginToTwitter(page) {
 
   if (!passwordInput) {
     console.log("Could not find password input after retries");
-    const html = await page.content();
-    console.log("Page length:", html.length);
-    console.log("First 2000 chars:", html.substring(0, 2000));
+    const title = await page.title();
+    console.log("Current page title:", title);
+    const url = await page.url();
+    console.log("Current URL:", url);
+
+    // Look for any visible text/errors
+    const bodyText = await page.evaluate(() => {
+      return document.body?.innerText?.substring(0, 3000) || "No body text";
+    });
+    console.log("Page text content:", bodyText);
     return false;
   }
 
