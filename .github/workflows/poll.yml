@@ -23,7 +23,7 @@ jobs:
       - name: Poll RSS, update feed.json, notify Discord
         env:
           RSS_URLS: "https://nitter.poast.org/MyVMK/rss,https://nitter.privacydev.net/MyVMK/rss,https://nitter.net/MyVMK/rss"
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_WEBHOOKS: ${{ secrets.DISCORD_WEBHOOKS }}
         run: node .github/scripts/poll.mjs
 
       - name: Commit changes (if any)

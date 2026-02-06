@@ -3,7 +3,7 @@ import fetch from "node-fetch";
 import { XMLParser } from "fast-xml-parser";
 
 const RSS_URLS = (process.env.RSS_URLS || "").split(",").filter(Boolean);
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
+const DISCORD_WEBHOOKS = (process.env.DISCORD_WEBHOOKS || "").split(",").filter(Boolean);
 
 function readJson(path, fallback) {
   try { return JSON.parse(fs.readFileSync(path, "utf8")); }
@@ -72,17 +72,19 @@ if (normalized[0]?.guid) {
   writeJson(statePath, state);
 }
 
-if (DISCORD_WEBHOOK_URL && newItems.length) {
+if (DISCORD_WEBHOOKS.length && newItems.length) {
   // Send in chronological order (oldest first)
   newItems.reverse();
 
   for (const item of newItems.slice(0, 5)) { // cap to avoid flooding
     const content = `**MyVMK posted:** ${item.title}\n${item.link}`;
-    await fetch(DISCORD_WEBHOOK_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ content })
-    });
+    for (const webhook of DISCORD_WEBHOOKS) {
+      await fetch(webhook, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ content })
+      });
+    }
   }
 }
 
