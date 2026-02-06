@@ -52,8 +52,17 @@ const normalized = items.map(i => ({
   guid: (typeof i.guid === "object" ? i.guid["#text"] : i.guid) ?? i.link ?? i.title ?? ""
 }));
 
-// Update the hosted JSON (latest 20)
-writeJson("feed.json", { updatedAt: new Date().toISOString(), items: normalized.slice(0, 20) });
+// Load existing feed and merge with new items (archive all tweets)
+const existingFeed = readJson("feed.json", { items: [] });
+const existingGuids = new Set(existingFeed.items.map(i => i.guid));
+const newFromRss = normalized.filter(i => !existingGuids.has(i.guid));
+
+// Merge: new items first, then existing, sorted by date (newest first)
+const allItems = [...newFromRss, ...existingFeed.items]
+  .sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+
+// Update the hosted JSON (all archived tweets)
+writeJson("feed.json", { updatedAt: new Date().toISOString(), items: allItems });
 
 // Determine which are new since last run
 let newItems = [];

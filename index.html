@@ -307,9 +307,52 @@
       opacity: 0.5;
     }
 
+    .nitter-promo {
+      text-align: center;
+      margin-top: 50px;
+      padding: 24px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    .nitter-promo p {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      margin-bottom: 12px;
+    }
+
+    .nitter-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--accent-gold);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 1rem;
+      padding: 12px 20px;
+      background: rgba(255, 215, 0, 0.1);
+      border: 1px solid rgba(255, 215, 0, 0.2);
+      border-radius: 10px;
+      transition: all 0.2s ease;
+    }
+
+    .nitter-link:hover {
+      background: rgba(255, 215, 0, 0.2);
+      border-color: rgba(255, 215, 0, 0.4);
+      transform: translateY(-2px);
+    }
+
+    .nitter-link svg {
+      width: 16px;
+      height: 16px;
+    }
+
     footer {
       text-align: center;
-      margin-top: 60px;
+      margin-top: 40px;
       padding-top: 30px;
       border-top: 1px solid var(--card-border);
       color: var(--text-secondary);
@@ -353,6 +396,16 @@
         <div class="loading-spinner"></div>
         <p>Loading magical updates...</p>
       </div>
+    </div>
+
+    <div class="nitter-promo">
+      <p>Avoiding Twitter? Check out MyVMK tweets here:</p>
+      <a href="https://nitter.net/MyVMK/" target="_blank" rel="noreferrer" class="nitter-link">
+        nitter.net/MyVMK
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/>
+        </svg>
+      </a>
     </div>
 
     <footer>
