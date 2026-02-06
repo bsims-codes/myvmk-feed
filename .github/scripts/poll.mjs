@@ -67,6 +67,10 @@ async function loginToTwitter(page) {
     await new Promise(r => setTimeout(r, 3000));
   }
 
+  // Wait for password screen to load
+  console.log("Waiting for password screen...");
+  await new Promise(r => setTimeout(r, 2000));
+
   // Try multiple selectors for password input
   console.log("Looking for password input...");
   const passwordSelectors = [
@@ -76,16 +80,21 @@ async function loginToTwitter(page) {
   ];
 
   let passwordInput = null;
-  for (const selector of passwordSelectors) {
-    passwordInput = await page.$(selector);
-    if (passwordInput) {
-      console.log(`Found password input with: ${selector}`);
-      break;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    for (const selector of passwordSelectors) {
+      passwordInput = await page.$(selector);
+      if (passwordInput) {
+        console.log(`Found password input with: ${selector}`);
+        break;
+      }
     }
+    if (passwordInput) break;
+    console.log(`Attempt ${attempt + 1}: Password input not found, waiting...`);
+    await new Promise(r => setTimeout(r, 2000));
   }
 
   if (!passwordInput) {
-    console.log("Could not find password input");
+    console.log("Could not find password input after retries");
     const html = await page.content();
     console.log("Page length:", html.length);
     console.log("First 2000 chars:", html.substring(0, 2000));
@@ -167,7 +176,7 @@ async function scrapeTwitter(page, username) {
     });
 
     return results;
-  }, targetUser);
+  }, username);
 
   console.log(`Found ${tweets.length} tweets`);
   if (tweets.length > 0) {
