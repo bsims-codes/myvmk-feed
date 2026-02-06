@@ -1,5 +1,5 @@
 import fs from "fs";
-import fetch from "node-fetch";
+import puppeteer from "puppeteer";
 
 const NITTER_URL = process.env.NITTER_URL || "https://nitter.net/MyVMK";
 const DISCORD_WEBHOOKS = (process.env.DISCORD_WEBHOOKS || "").split(",").filter(Boolean);
@@ -14,63 +14,70 @@ function writeJson(path, data) {
 }
 
 async function scrapeNitter(url) {
-  console.log(`Scraping ${url}...`);
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
+  console.log(`Launching browser...`);
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
-  if (!res.ok) {
-    throw new Error(`Failed to fetch ${url}: ${res.status}`);
-  }
-  const html = await res.text();
 
-  const tweets = [];
+  try {
+    const page = await browser.newPage();
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-  // Split by timeline-item divs
-  const timelineItems = html.split(/<div class="timeline-item[^"]*"[^>]*>/);
+    console.log(`Navigating to ${url}...`);
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
-  for (const item of timelineItems.slice(1)) { // Skip first empty split
-    // Extract tweet link: <a class="tweet-link" href="/MyVMK/status/123#m">
-    const linkMatch = item.match(/<a class="tweet-link" href="([^"]+)"/);
+    // Wait for tweets to load
+    await page.waitForSelector('.timeline-item', { timeout: 30000 }).catch(() => {
+      console.log('No .timeline-item found, checking page content...');
+    });
 
-    // Extract content: <div class="tweet-content media-body" dir="auto">...</div>
-    const contentMatch = item.match(/<div class="tweet-content[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+    // Extract tweets from the page
+    const tweets = await page.evaluate(() => {
+      const items = document.querySelectorAll('.timeline-item');
+      const results = [];
 
-    // Extract date: <span class="tweet-date"><a ... title="Feb 5, 2026 · 11:30 PM UTC">
-    const dateMatch = item.match(/<span class="tweet-date"[^>]*><a[^>]*title="([^"]+)"/);
+      items.forEach(item => {
+        const linkEl = item.querySelector('a.tweet-link');
+        const contentEl = item.querySelector('.tweet-content');
+        const dateEl = item.querySelector('.tweet-date a');
 
-    if (linkMatch && contentMatch) {
-      // Clean content - remove HTML tags and normalize whitespace
-      let content = contentMatch[1]
-        .replace(/<a[^>]*>#(\w+)<\/a>/g, '#$1') // Preserve hashtags
-        .replace(/<[^>]+>/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+        if (linkEl && contentEl) {
+          const tweetPath = linkEl.getAttribute('href')?.replace(/#.*/, '') || '';
+          const tweetId = tweetPath.split('/').pop() || tweetPath;
+          const fullLink = `https://twitter.com${tweetPath}`;
 
-      const tweetPath = linkMatch[1].replace(/#.*/, ''); // Remove #m anchor
-      const tweetId = tweetPath.split('/').pop() || tweetPath;
-      const fullLink = `https://twitter.com${tweetPath}`;
+          // Get text content, preserving hashtags
+          let content = contentEl.textContent?.trim() || '';
 
-      // Parse date like "Feb 5, 2026 · 11:30 PM UTC"
-      let pubDate = new Date().toISOString();
-      if (dateMatch) {
-        const dateStr = dateMatch[1].replace(' · ', ' ').replace(' UTC', '');
-        const parsed = new Date(dateStr + ' UTC');
-        if (!isNaN(parsed)) pubDate = parsed.toISOString();
-      }
+          // Parse date from title attribute like "Feb 5, 2026 · 11:30 PM UTC"
+          let pubDate = new Date().toISOString();
+          if (dateEl) {
+            const dateTitle = dateEl.getAttribute('title');
+            if (dateTitle) {
+              const dateStr = dateTitle.replace(' · ', ' ').replace(' UTC', '');
+              const parsed = new Date(dateStr + ' UTC');
+              if (!isNaN(parsed.getTime())) pubDate = parsed.toISOString();
+            }
+          }
 
-      tweets.push({
-        title: content,
-        link: fullLink,
-        pubDate,
-        guid: tweetId
+          results.push({
+            title: content,
+            link: fullLink,
+            pubDate,
+            guid: tweetId
+          });
+        }
       });
-    }
-  }
 
-  console.log(`Found ${tweets.length} tweets`);
-  return tweets;
+      return results;
+    });
+
+    console.log(`Found ${tweets.length} tweets`);
+    return tweets;
+  } finally {
+    await browser.close();
+  }
 }
 
 const statePath = ".github/state.json";
