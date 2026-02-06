@@ -92,7 +92,7 @@ if (DISCORD_WEBHOOKS.length && newItems.length) {
       embeds: [{
         author: {
           name: "New Tweet from @MyVMK",
-          icon_url: "https://bsims-codes.github.io/myvmk-feed/image.png",
+          icon_url: "https://bsims-codes.github.io/myvmk-feed/gold-logo.ico",
           url: "https://twitter.com/MyVMK"
         },
         description: item.title,
