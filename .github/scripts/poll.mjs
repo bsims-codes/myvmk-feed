@@ -86,12 +86,34 @@ if (DISCORD_WEBHOOKS.length && newItems.length) {
   newItems.reverse();
 
   for (const item of newItems.slice(0, 5)) { // cap to avoid flooding
-    const content = `**MyVMK posted:** ${item.title}\n${item.link}`;
+    const payload = {
+      username: "MyVMK Feed",
+      avatar_url: "https://bsims-codes.github.io/myvmk-feed/gold-logo.ico",
+      embeds: [{
+        author: {
+          name: "New Tweet from @MyVMK",
+          icon_url: "https://bsims-codes.github.io/myvmk-feed/image.png",
+          url: "https://twitter.com/MyVMK"
+        },
+        description: item.title,
+        color: 0xFFD700, // Gold
+        fields: [{
+          name: "🔗 View Tweet",
+          value: `[Open on Twitter/X](${item.link})`,
+          inline: true
+        }],
+        footer: {
+          text: "MyVMK Feed"
+        },
+        timestamp: item.pubDate || new Date().toISOString()
+      }]
+    };
+
     for (const webhook of DISCORD_WEBHOOKS) {
       await fetch(webhook, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ content })
+        body: JSON.stringify(payload)
       });
     }
   }
