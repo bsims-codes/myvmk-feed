@@ -17,41 +17,95 @@ function writeJson(path, data) {
 
 async function loginToTwitter(page) {
   console.log("Navigating to Twitter login...");
-  await page.goto("https://twitter.com/i/flow/login", { waitUntil: "networkidle2", timeout: 60000 });
+  await page.goto("https://x.com/i/flow/login", { waitUntil: "networkidle2", timeout: 60000 });
 
-  // Wait for and enter username
+  await new Promise(r => setTimeout(r, 3000));
+
+  // Debug: log page content
+  const title = await page.title();
+  console.log("Page title:", title);
+
+  // Try multiple selectors for username input
+  console.log("Looking for username input...");
+  const usernameSelectors = [
+    'input[autocomplete="username"]',
+    'input[name="text"]',
+    'input[name="session[username_or_email]"]',
+    'input[type="text"]'
+  ];
+
+  let usernameInput = null;
+  for (const selector of usernameSelectors) {
+    usernameInput = await page.$(selector);
+    if (usernameInput) {
+      console.log(`Found username input with: ${selector}`);
+      break;
+    }
+  }
+
+  if (!usernameInput) {
+    console.log("Could not find username input, dumping page HTML...");
+    const html = await page.content();
+    console.log("Page length:", html.length);
+    console.log("First 2000 chars:", html.substring(0, 2000));
+    return false;
+  }
+
+  // Enter username
   console.log("Entering username...");
-  await page.waitForSelector('input[autocomplete="username"]', { timeout: 30000 });
-  await page.type('input[autocomplete="username"]', TWITTER_USERNAME, { delay: 50 });
+  await usernameInput.type(TWITTER_USERNAME, { delay: 100 });
+  await new Promise(r => setTimeout(r, 500));
   await page.keyboard.press("Enter");
+  await new Promise(r => setTimeout(r, 3000));
 
-  // Twitter sometimes asks for phone/email verification
-  await new Promise(r => setTimeout(r, 2000));
-
-  // Check if there's an additional verification step
+  // Check if there's an additional verification step (phone/email)
   const verifyInput = await page.$('input[data-testid="ocfEnterTextTextInput"]');
   if (verifyInput) {
     console.log("Additional verification requested, entering username...");
-    await verifyInput.type(TWITTER_USERNAME, { delay: 50 });
+    await verifyInput.type(TWITTER_USERNAME, { delay: 100 });
     await page.keyboard.press("Enter");
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 3000));
   }
 
-  // Wait for and enter password
+  // Try multiple selectors for password input
+  console.log("Looking for password input...");
+  const passwordSelectors = [
+    'input[name="password"]',
+    'input[type="password"]',
+    'input[autocomplete="current-password"]'
+  ];
+
+  let passwordInput = null;
+  for (const selector of passwordSelectors) {
+    passwordInput = await page.$(selector);
+    if (passwordInput) {
+      console.log(`Found password input with: ${selector}`);
+      break;
+    }
+  }
+
+  if (!passwordInput) {
+    console.log("Could not find password input");
+    const html = await page.content();
+    console.log("Page length:", html.length);
+    console.log("First 2000 chars:", html.substring(0, 2000));
+    return false;
+  }
+
+  // Enter password
   console.log("Entering password...");
-  await page.waitForSelector('input[name="password"]', { timeout: 30000 });
-  await page.type('input[name="password"]', TWITTER_PASSWORD, { delay: 50 });
+  await passwordInput.type(TWITTER_PASSWORD, { delay: 100 });
+  await new Promise(r => setTimeout(r, 500));
   await page.keyboard.press("Enter");
 
   // Wait for login to complete
   console.log("Waiting for login to complete...");
-  await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 }).catch(() => {});
-  await new Promise(r => setTimeout(r, 3000));
+  await new Promise(r => setTimeout(r, 5000));
 
   // Check if logged in
   const url = page.url();
   console.log("Current URL:", url);
-  if (url.includes("/home") || !url.includes("/login")) {
+  if (url.includes("/home") || (!url.includes("/login") && !url.includes("/flow"))) {
     console.log("Login successful!");
     return true;
   }
