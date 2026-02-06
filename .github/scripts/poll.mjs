@@ -95,7 +95,12 @@ const allItems = [...newFromRss, ...existingFeed.items]
   .sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
 // Update the hosted JSON (all archived tweets)
-writeJson("feed.json", { updatedAt: new Date().toISOString(), items: allItems });
+const lastTweetDate = allItems[0]?.pubDate || null;
+writeJson("feed.json", {
+  lastChecked: new Date().toISOString(),
+  lastTweetDate,
+  items: allItems
+});
 
 // Determine which are new since last run
 let newItems = [];

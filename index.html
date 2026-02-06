@@ -387,7 +387,9 @@
       <p class="subtitle">Latest updates from the Virtual Magic Kingdom</p>
       <div class="updated-at" id="updated-at" style="display: none;">
         <span class="pulse-dot"></span>
-        <span id="updated-text">Checking for updates...</span>
+        <span id="checked-text">Checking...</span>
+        <span style="opacity: 0.5; margin: 0 6px;">•</span>
+        <span id="tweet-text">Loading...</span>
       </div>
     </header>
 
@@ -491,11 +493,26 @@
       .then(data => {
         const feedEl = document.getElementById('feed');
         const updatedEl = document.getElementById('updated-at');
-        const updatedText = document.getElementById('updated-text');
 
-        if (data.updatedAt) {
-          updatedEl.style.display = 'inline-flex';
-          updatedText.textContent = 'Updated ' + formatDate(data.updatedAt);
+        const checkedText = document.getElementById('checked-text');
+        const tweetText = document.getElementById('tweet-text');
+
+        // Show the status bar
+        updatedEl.style.display = 'inline-flex';
+
+        // Display last checked time
+        if (data.lastChecked) {
+          checkedText.textContent = 'Checked ' + formatDate(data.lastChecked);
+        } else if (data.updatedAt) {
+          // Fallback for old format
+          checkedText.textContent = 'Checked ' + formatDate(data.updatedAt);
+        }
+
+        // Display last tweet time
+        if (data.lastTweetDate) {
+          tweetText.textContent = 'Last tweet ' + formatDate(data.lastTweetDate);
+        } else if (data.items?.[0]?.pubDate) {
+          tweetText.textContent = 'Last tweet ' + formatDate(data.items[0].pubDate);
         }
 
         if (!data.items?.length) {
