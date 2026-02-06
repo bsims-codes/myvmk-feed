@@ -1,8 +1,7 @@
 import fs from "fs";
 import puppeteer from "puppeteer";
 
-const TWITTER_USERNAME = process.env.TWITTER_USERNAME;
-const TWITTER_PASSWORD = process.env.TWITTER_PASSWORD;
+const TWITTER_COOKIES_BASE64 = process.env.TWITTER_COOKIES;
 const TARGET_USER = "MyVMK";
 const DISCORD_WEBHOOKS = (process.env.DISCORD_WEBHOOKS || "").split(",").filter(Boolean);
 
@@ -15,233 +14,107 @@ function writeJson(path, data) {
   fs.writeFileSync(path, JSON.stringify(data, null, 2));
 }
 
-async function loginToTwitter(page) {
-  console.log("Navigating to Twitter login...");
-  await page.goto("https://x.com/i/flow/login", { waitUntil: "networkidle2", timeout: 60000 });
-
-  await new Promise(r => setTimeout(r, 3000));
-
-  // Debug: log page content
-  const title = await page.title();
-  console.log("Page title:", title);
-
-  // Try multiple selectors for username input
-  console.log("Looking for username input...");
-  const usernameSelectors = [
-    'input[autocomplete="username"]',
-    'input[name="text"]',
-    'input[name="session[username_or_email]"]',
-    'input[type="text"]'
-  ];
-
-  let usernameInput = null;
-  for (const selector of usernameSelectors) {
-    usernameInput = await page.$(selector);
-    if (usernameInput) {
-      console.log(`Found username input with: ${selector}`);
-      break;
-    }
-  }
-
-  if (!usernameInput) {
-    console.log("Could not find username input, dumping page HTML...");
-    const html = await page.content();
-    console.log("Page length:", html.length);
-    console.log("First 2000 chars:", html.substring(0, 2000));
-    return false;
-  }
-
-  // Enter username
-  console.log("Entering username...");
-  await usernameInput.click();
-  await usernameInput.type(TWITTER_USERNAME, { delay: 100 });
-  await new Promise(r => setTimeout(r, 1000));
-
-  // Try clicking Next button instead of Enter
-  const nextButton = await page.$('[role="button"]:has-text("Next")') ||
-                     await page.$('div[role="button"][tabindex="0"]');
-  if (nextButton) {
-    console.log("Clicking Next button...");
-    await nextButton.click();
-  } else {
-    console.log("No Next button found, pressing Enter...");
-    await page.keyboard.press("Enter");
-  }
-  await new Promise(r => setTimeout(r, 3000));
-
-  // Check if there's an additional verification step (phone/email)
-  const verifyInput = await page.$('input[data-testid="ocfEnterTextTextInput"]');
-  if (verifyInput) {
-    console.log("Additional verification requested, entering username...");
-    await verifyInput.type(TWITTER_USERNAME, { delay: 100 });
-    await page.keyboard.press("Enter");
-    await new Promise(r => setTimeout(r, 3000));
-  }
-
-  // Wait for password screen to load
-  console.log("Waiting for password screen...");
-  await new Promise(r => setTimeout(r, 2000));
-
-  // Try multiple selectors for password input
-  console.log("Looking for password input...");
-  const passwordSelectors = [
-    'input[name="password"]',
-    'input[type="password"]',
-    'input[autocomplete="current-password"]'
-  ];
-
-  let passwordInput = null;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    for (const selector of passwordSelectors) {
-      passwordInput = await page.$(selector);
-      if (passwordInput) {
-        console.log(`Found password input with: ${selector}`);
-        break;
-      }
-    }
-    if (passwordInput) break;
-    console.log(`Attempt ${attempt + 1}: Password input not found, waiting...`);
-    await new Promise(r => setTimeout(r, 2000));
-  }
-
-  if (!passwordInput) {
-    console.log("Could not find password input after retries");
-    const title = await page.title();
-    console.log("Current page title:", title);
-    const url = await page.url();
-    console.log("Current URL:", url);
-
-    // Look for any visible text/errors
-    const bodyText = await page.evaluate(() => {
-      return document.body?.innerText?.substring(0, 3000) || "No body text";
-    });
-    console.log("Page text content:", bodyText);
-    return false;
-  }
-
-  // Enter password
-  console.log("Entering password...");
-  await passwordInput.type(TWITTER_PASSWORD, { delay: 100 });
-  await new Promise(r => setTimeout(r, 500));
-  await page.keyboard.press("Enter");
-
-  // Wait for login to complete
-  console.log("Waiting for login to complete...");
-  await new Promise(r => setTimeout(r, 5000));
-
-  // Check if logged in
-  const url = page.url();
-  console.log("Current URL:", url);
-  if (url.includes("/home") || (!url.includes("/login") && !url.includes("/flow"))) {
-    console.log("Login successful!");
-    return true;
-  }
-
-  console.log("Login may have failed, attempting to continue anyway...");
-  return false;
-}
-
-async function scrapeTwitter(page, username) {
-  const url = `https://twitter.com/${username}`;
-  console.log(`\nNavigating to ${url}...`);
-  await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
-
-  // Wait for tweets to load
-  console.log("Waiting for tweets to load...");
-  await page.waitForSelector('article[data-testid="tweet"]', { timeout: 30000 }).catch(() => {
-    console.log("No tweets found with primary selector, checking page...");
+async function scrapeTwitter(cookies, username) {
+  console.log("Launching browser...");
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"]
   });
 
-  // Give extra time for tweets to render
-  await new Promise(r => setTimeout(r, 2000));
+  try {
+    const page = await browser.newPage();
+    await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+    await page.setViewport({ width: 1280, height: 800 });
 
-  // Extract tweets
-  const tweets = await page.evaluate((targetUser) => {
-    const articles = document.querySelectorAll('article[data-testid="tweet"]');
-    const results = [];
+    // Set cookies
+    console.log(`Setting ${cookies.length} cookies...`);
+    await page.setCookie(...cookies);
 
-    articles.forEach(article => {
-      try {
-        // Get tweet text
-        const tweetTextEl = article.querySelector('[data-testid="tweetText"]');
-        const content = tweetTextEl?.textContent?.trim() || "";
+    // Navigate to profile
+    const url = `https://x.com/${username}`;
+    console.log(`Navigating to ${url}...`);
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
 
-        // Get tweet link (contains the tweet ID)
-        const timeEl = article.querySelector("time");
-        const linkEl = timeEl?.closest("a");
-        const tweetUrl = linkEl?.href || "";
-        const tweetId = tweetUrl.split("/status/")[1]?.split("?")[0] || "";
+    console.log("Current URL:", page.url());
 
-        // Get timestamp
-        const datetime = timeEl?.getAttribute("datetime") || new Date().toISOString();
-
-        // Only include tweets from the target user (not retweets from others)
-        const authorEl = article.querySelector('[data-testid="User-Name"]');
-        const authorText = authorEl?.textContent || "";
-        const isFromTarget = authorText.toLowerCase().includes(targetUser.toLowerCase());
-
-        if (content && tweetId && isFromTarget) {
-          results.push({
-            title: content,
-            link: `https://twitter.com/${targetUser}/status/${tweetId}`,
-            pubDate: datetime,
-            guid: tweetId
-          });
-        }
-      } catch (e) {
-        // Skip problematic tweets
-      }
+    // Wait for tweets
+    console.log("Waiting for tweets to load...");
+    await page.waitForSelector('article[data-testid="tweet"]', { timeout: 30000 }).catch(() => {
+      console.log("No tweets found with selector");
     });
 
-    return results;
-  }, username);
+    await new Promise(r => setTimeout(r, 2000));
 
-  console.log(`Found ${tweets.length} tweets`);
-  if (tweets.length > 0) {
-    console.log("First tweet:", JSON.stringify(tweets[0], null, 2));
+    // Extract tweets
+    const tweets = await page.evaluate((targetUser) => {
+      const articles = document.querySelectorAll('article[data-testid="tweet"]');
+      const results = [];
+
+      articles.forEach(article => {
+        try {
+          const tweetTextEl = article.querySelector('[data-testid="tweetText"]');
+          const content = tweetTextEl?.textContent?.trim() || "";
+
+          const timeEl = article.querySelector("time");
+          const linkEl = timeEl?.closest("a");
+          const tweetUrl = linkEl?.href || "";
+          const tweetId = tweetUrl.split("/status/")[1]?.split("?")[0] || "";
+          const datetime = timeEl?.getAttribute("datetime") || new Date().toISOString();
+
+          const authorEl = article.querySelector('[data-testid="User-Name"]');
+          const authorText = authorEl?.textContent || "";
+          const isFromTarget = authorText.toLowerCase().includes(targetUser.toLowerCase());
+
+          if (content && tweetId && isFromTarget) {
+            results.push({
+              title: content,
+              link: `https://twitter.com/${targetUser}/status/${tweetId}`,
+              pubDate: datetime,
+              guid: tweetId
+            });
+          }
+        } catch (e) {}
+      });
+
+      return results;
+    }, username);
+
+    console.log(`Found ${tweets.length} tweets`);
+    if (tweets.length > 0) {
+      console.log("First tweet:", JSON.stringify(tweets[0], null, 2));
+    }
+    return tweets;
+  } finally {
+    await browser.close();
   }
-  return tweets;
 }
 
-// Main execution
-console.log("Launching browser...");
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ["--no-sandbox", "--disable-setuid-sandbox"]
-});
-
+// Main
 let normalized = [];
 
-try {
-  const page = await browser.newPage();
-  await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-  await page.setViewport({ width: 1280, height: 800 });
-
-  if (TWITTER_USERNAME && TWITTER_PASSWORD) {
-    await loginToTwitter(page);
-    normalized = await scrapeTwitter(page, TARGET_USER);
-  } else {
-    console.log("No Twitter credentials provided, skipping...");
+if (!TWITTER_COOKIES_BASE64) {
+  console.log("No TWITTER_COOKIES secret provided!");
+} else {
+  try {
+    const cookiesJson = Buffer.from(TWITTER_COOKIES_BASE64, "base64").toString("utf8");
+    const cookies = JSON.parse(cookiesJson);
+    console.log(`Loaded ${cookies.length} cookies from secret`);
+    normalized = await scrapeTwitter(cookies, TARGET_USER);
+  } catch (err) {
+    console.error("Error:", err.message);
   }
-} catch (err) {
-  console.error("Error:", err.message);
-} finally {
-  await browser.close();
 }
 
 const statePath = ".github/state.json";
 const state = readJson(statePath, { lastSeenGuid: null });
 
-// Load existing feed and merge with new items
 const existingFeed = readJson("feed.json", { items: [] });
 const existingGuids = new Set(existingFeed.items.map(i => i.guid));
 const newFromScrape = normalized.filter(i => !existingGuids.has(i.guid));
 
-// Merge: new items first, then existing, sorted by date
 const allItems = [...newFromScrape, ...existingFeed.items]
   .sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
-// Update the hosted JSON
 const lastTweetDate = allItems[0]?.pubDate || null;
 writeJson("feed.json", {
   lastChecked: new Date().toISOString(),
@@ -249,15 +122,12 @@ writeJson("feed.json", {
   items: allItems
 });
 
-// Determine which are new since last run
 let newItems = [];
 if (state.lastSeenGuid) {
   for (const item of normalized) {
     if (item.guid === state.lastSeenGuid) break;
     newItems.push(item);
   }
-} else {
-  newItems = [];
 }
 
 if (normalized[0]?.guid) {
@@ -265,7 +135,6 @@ if (normalized[0]?.guid) {
   writeJson(statePath, state);
 }
 
-// Send Discord notifications
 if (DISCORD_WEBHOOKS.length && newItems.length) {
   newItems.reverse();
 
