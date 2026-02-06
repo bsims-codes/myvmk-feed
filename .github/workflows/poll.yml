@@ -1,4 +1,4 @@
-name: Scrape Nitter and notify
+name: Scrape Twitter and notify
 
 on:
   schedule:
@@ -20,8 +20,10 @@ jobs:
           npm init -y
           npm i puppeteer
 
-      - name: Scrape Nitter, update feed.json, notify Discord
+      - name: Scrape Twitter, update feed.json, notify Discord
         env:
+          TWITTER_USERNAME: ${{ secrets.TWITTER_USERNAME }}
+          TWITTER_PASSWORD: ${{ secrets.TWITTER_PASSWORD }}
           DISCORD_WEBHOOKS: ${{ secrets.DISCORD_WEBHOOKS }}
         run: node .github/scripts/poll.mjs
 
