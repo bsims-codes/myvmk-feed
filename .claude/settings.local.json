@@ -14,7 +14,9 @@
       "Bash(git stash:*)",
       "Bash(node --version:*)",
       "Bash(node:*)",
-      "WebSearch"
+      "WebSearch",
+      "WebFetch(domain:nitter.net)",
+      "Bash(curl:*)"
     ]
   }
 }
