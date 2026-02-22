@@ -1,9 +1,14 @@
 name: Scrape Twitter and notify
 
+# DISABLED - Using Windows Task Scheduler instead
+# Uncomment to re-enable GitHub Actions
+#on:
+#  schedule:
+#    - cron: "*/5 * * * *"   # every 5 minutes
+#  workflow_dispatch:
+
 on:
-  schedule:
-    - cron: "*/5 * * * *"   # every 5 minutes
-  workflow_dispatch:
+  workflow_dispatch:  # Manual trigger only for testing
 
 permissions:
   contents: write

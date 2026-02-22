@@ -1,3 +1,7 @@
 node_modules/
 package.json
 package-lock.json
+.env
+run-poll.bat
+cookies-base64.txt
+twitter-cookies.json
